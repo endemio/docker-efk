@@ -1,0 +1,61 @@
+es_host: "elasticsearch"
+
+es_port: 9200
+
+# (Optional) Connect with SSL to Elasticsearch
+use_ssl: False
+
+# (Optional) basic-auth username and password for Elasticsearch
+#es_username: someusername
+#es_password: somepassword
+
+
+#---------------------------------------------------------
+# (Required)
+# Rule name, must be unique
+name: rule
+
+# (Required)
+# Type of alert.
+# the frequency rule type alerts when num_events events occur with timeframe time
+type: any
+
+realert:
+  minutes: 0
+
+# (Required)
+# Index to search, wildcard supported
+index: fluentd-*
+
+# (Required, new_term specific)
+# Monitor the field ip_address
+#fields:
+# - "_id"
+
+# (Optional, new_term specific)
+# This means that we will query 90 days worth of data when ElastAlert starts to find which values of ip_address already exist
+# If they existed in the last 90 days, no alerts will be triggered for them when they appear
+#terms_window_size:
+#  days: 1
+
+# (Required)
+# A list of Elasticsearch filters used for find events
+# These filters are joined with AND and nested in a filtered query
+# For more info: http://www.elasticsearch.org/guide/en/elasticsearch/reference/current/query-dsl.html
+# We are filtering for only "login_event" type documents with username "admin"
+filter:
+- query:
+    query_string:
+        query: "type: ERROR OR type: CRITICAL"
+
+# (Required)
+# The alert is use when a match is found
+alert:
+- "telegram"
+
+alert_text: "{1}, {0}, {2} at {3}"
+alert_text_args: ["@log_name", "type", "message", "@timestamp"]
+alert_text_type: alert_text_only
+
+telegram_bot_token: 333
+telegram_room_id: 2222
