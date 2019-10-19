@@ -1,0 +1,150 @@
+version: '3.7'
+
+services:
+  elasticsearch:
+    image: ${IMAGE_ES}
+    restart: always
+    tty: true
+    stdin_open: true
+    privileged: true
+    ports:
+      - 9200:9200
+    environment:
+      - discovery.type=single-node
+      - cluster.name=docker-cluster
+      - bootstrap.memory_lock=true
+      - "ES_JAVA_OPTS=-Xms512m -Xmx512m"
+    volumes:
+      - es-data:/usr/share/elasticsearch/data
+    networks:
+      - net
+    depends_on:
+      - fluentd
+    logging:
+      driver: fluentd
+      options:
+        fluentd-address: localhost:24224
+        fluentd-async-connect: 'true'
+        fluentd-retry-wait: '5s'
+        fluentd-max-retries: '130'
+        tag: efk.elasticsearch
+
+  kibana:
+    image: ${IMAGE_KIBANA}
+    networks:
+      - net
+    depends_on:
+      - elasticsearch
+      - fluentd
+    logging:
+      driver: fluentd
+      options:
+        fluentd-address: localhost:24224
+        fluentd-async-connect: 'true'
+        fluentd-retry-wait: '1s'
+        fluentd-max-retries: '30'
+        tag: efk.kibana
+
+  nginx:
+    image: ${IMAGE_NGINX}
+    restart: always
+    ports:
+      - 8070:80
+    volumes:
+      - type: bind
+        source: ./nginx/nginx.conf
+        target: /etc/nginx/nginx.conf
+        read_only: true
+      - type: bind
+        source: ./nginx/conf.d
+        target: /etc/nginx/conf.d
+        read_only: true
+      - type: bind
+        source: ./nginx/htpasswd
+        target: /etc/nginx/htpasswd
+        read_only: true
+    networks:
+      - net
+    depends_on:
+      - kibana
+    logging:
+      driver: fluentd
+      options:
+        fluentd-address: localhost:24224
+        fluentd-async-connect: 'true'
+        fluentd-retry-wait: '1s'
+        fluentd-max-retries: '30'
+        tag: efk.nginx
+
+  fluentd:
+    build: ./fluentd
+    ports:
+      - ${FL_PORT}:24224
+      - ${FL_PORT}:24224/udp
+    volumes:
+      - ./fluentd/etc:/fluentd/etc
+    networks:
+      - net
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "1G"
+        max-file: "2"
+        tag: efk.fluentd
+
+  elastalert:
+    build: ./elastalert
+    environment:
+      TELEGRAM_BOT: ${TELEGRAM_BOT}
+    networks:
+      - net
+    depends_on:
+      - elasticsearch
+    volumes:
+      - ./elastalert/config.yaml:/opt/config/elastalert_config.yaml
+      - ./elastalert/config.json:/opt/config/config.dev.json
+      - ./elastalert/rules:/opt/elastalert/rules
+    logging:
+      driver: fluentd
+      options:
+        fluentd-address: localhost:24224
+        fluentd-async-connect: 'true'
+        fluentd-retry-wait: '1s'
+        fluentd-max-retries: '30'
+        tag: efk.elastalert
+
+  curator:
+    image: ${IMAGE_CURATOR}
+    environment:
+      ES_HOST: elasticsearch
+      ES_PORT: 9200
+      LOG_INDEX: fluentd
+      UNIT_COUNT: 14
+      UNIT: days
+    volumes:
+      - ./curator/action.yml:/tmp/curator-action.yml
+      - ./curator/config.yml:/tmp/curator-config.yml
+    networks:
+      - net
+    entrypoint: ""
+    command:
+      - /bin/sh
+      - -c
+      - |
+        /usr/bin/curator --config /tmp/curator-config.yml /tmp/curator-action.yml
+        sleep 86400
+    logging:
+      driver: fluentd
+      options:
+        fluentd-address: localhost:24224
+        fluentd-async-connect: 'true'
+        fluentd-retry-wait: '1s'
+        fluentd-max-retries: '30'
+        tag: efk.curator
+
+networks:
+  net:
+    driver: bridge
+
+volumes:
+  es-data: {}
