@@ -16,8 +16,8 @@ services:
       - cluster.name=docker-cluster
       - bootstrap.memory_lock=true
       - "ES_JAVA_OPTS=-Xms512m -Xmx512m"
-      - ELASTIC_PASSWORD=$ELASTIC_PASSWORD
-      - xpack.security.enabled=$ELASTIC_SECURITY
+      - ELASTIC_PASSWORD=$ES_PASSWORD
+      - xpack.security.enabled=$ES_SECURITY
     volumes:
       - es-data:/usr/share/elasticsearch/data
     networks:
@@ -39,7 +39,7 @@ services:
       - net
     environment:
       - ELASTICSEARCH_USERNAME=elastic
-      - ELASTICSEARCH_PASSWORD=$ELASTIC_PASSWORD
+      - ELASTICSEARCH_PASSWORD=$ES_PASSWORD
     depends_on:
       - elasticsearch
       - fluentd
