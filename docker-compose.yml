@@ -3,17 +3,21 @@ version: '3.7'
 services:
   elasticsearch:
     image: ${IMAGE_ES}
+    hostname: elasticsearch
     restart: always
     tty: true
     stdin_open: true
     privileged: true
     ports:
-      - 9200:9200
+      - ${ES_PORT:-9200}:9200
+      - 9300:9300
     environment:
       - discovery.type=single-node
       - cluster.name=docker-cluster
       - bootstrap.memory_lock=true
       - "ES_JAVA_OPTS=-Xms512m -Xmx512m"
+      - ELASTIC_PASSWORD=$ELASTIC_PASSWORD
+      - xpack.security.enabled=$ELASTIC_SECURITY
     volumes:
       - es-data:/usr/share/elasticsearch/data
     networks:
@@ -33,6 +37,9 @@ services:
     image: ${IMAGE_KIBANA}
     networks:
       - net
+    environment:
+      - ELASTICSEARCH_USERNAME=elastic
+      - ELASTICSEARCH_PASSWORD=$ELASTIC_PASSWORD
     depends_on:
       - elasticsearch
       - fluentd
@@ -49,7 +56,7 @@ services:
     image: ${IMAGE_NGINX}
     restart: always
     ports:
-      - ${NGINX_EXT_PORT:8080}:80
+      - ${NGINX_EXT_PORT:-8080}:80
     volumes:
       - ./nginx/nginx.conf:/etc/nginx/nginx.conf:ro
       - ./nginx/conf.d:/etc/nginx/conf.d:ro
@@ -70,8 +77,8 @@ services:
   fluentd:
     build: ./fluentd
     ports:
-      - ${FL_PORT:24224}:24224
-      - ${FL_PORT:24224}:24224/udp
+      - ${FL_PORT:-24224}:24224
+      - ${FL_PORT:-24224}:24224/udp
     volumes:
       - ./fluentd/etc:/fluentd/etc
     networks:
@@ -84,9 +91,8 @@ services:
         tag: efk.fluentd
 
   elastalert:
-    build: ./elastalert
-    environment:
-      TELEGRAM_BOT: ${TELEGRAM_BOT}
+    image: ${IMAGE_ELASTALERT}
+    restart: always
     networks:
       - net
     depends_on:
@@ -103,35 +109,6 @@ services:
         fluentd-retry-wait: '1s'
         fluentd-max-retries: '30'
         tag: efk.elastalert
-
-  curator:
-    image: ${IMAGE_CURATOR}
-    environment:
-      ES_HOST: elasticsearch
-      ES_PORT: ${ES_PORT:9200}
-      LOG_INDEX: fluentd
-      UNIT_COUNT: ${UNIT_COUNT:14}
-      UNIT: ${UNIT:14}
-    volumes:
-      - ./curator/action.yml:/tmp/curator-action.yml
-      - ./curator/config.yml:/tmp/curator-config.yml
-    networks:
-      - net
-    entrypoint: ""
-    command:
-      - /bin/sh
-      - -c
-      - |
-        /usr/bin/curator --config /tmp/curator-config.yml /tmp/curator-action.yml
-        sleep 86400
-    logging:
-      driver: fluentd
-      options:
-        fluentd-address: localhost:24224
-        fluentd-async-connect: 'true'
-        fluentd-retry-wait: '1s'
-        fluentd-max-retries: '30'
-        tag: efk.curator
 
 networks:
   net:
